@@ -331,6 +331,7 @@
                     <button class="play" onclick="togglePlayback()">▶️ Play</button>
                     <button class="stop" onclick="stopAll()">⏹️ Stop</button>
                     <button class="play" onclick="playAudioTrack()" id="playAudioBtn" style="display: none;">🎵 Play Audio</button>
+                    <button onclick="testAudio()" style="background: linear-gradient(45deg, #9b59b6, #8e44ad);">🔊 Test Audio</button>
                 </div>
             </div>
 
@@ -545,6 +546,8 @@
                 loadDrumSamples();
                 
                 console.log('Audio context initialized successfully');
+                console.log('Audio context state:', audioContext.state);
+                console.log('Sample rate:', audioContext.sampleRate);
             } catch (error) {
                 console.error('Error initializing audio context:', error);
                 alert('Audio initialization failed. Please check your browser settings.');
@@ -798,6 +801,11 @@
         }
 
         function startPlayback() {
+            console.log('startPlayback called');
+            console.log('Audio context:', audioContext);
+            console.log('Pattern:', pattern);
+            console.log('Pattern keys:', Object.keys(pattern));
+            
             if (!audioContext) {
                 alert('Audio context not initialized. Please refresh the page.');
                 return;
@@ -805,27 +813,38 @@
             
             // Resume audio context if it's suspended (required for autoplay policy)
             if (audioContext.state === 'suspended') {
+                console.log('Audio context suspended, resuming...');
                 audioContext.resume().then(() => {
                     console.log('Audio context resumed');
+                    startPlaybackAfterResume();
                 }).catch(error => {
                     console.error('Error resuming audio context:', error);
                     alert('Error starting audio. Please try clicking play again.');
                     return;
                 });
+            } else {
+                startPlaybackAfterResume();
             }
-            
+        }
+        
+        function startPlaybackAfterResume() {
+            console.log('Starting playback after resume');
             isPlaying = true;
             currentStep = 0;
             updateStatus('Playing');
             
             const stepTime = 60 / currentBPM / 4; // 16th note timing
+            console.log('Step time:', stepTime, 'seconds');
             
             function playStep() {
                 if (!isPlaying) return;
                 
+                console.log('Playing step:', currentStep);
+                
                 // Play notes for current step
                 Object.values(pattern).forEach(note => {
                     if (note.step === currentStep) {
+                        console.log('Playing note:', note);
                         playNote(note);
                     }
                 });
@@ -852,27 +871,36 @@
 
         function playNote(note) {
             const now = audioContext.currentTime;
+            console.log('playNote called for:', note.instrument, 'at time:', now);
             
             try {
                 switch (note.instrument) {
                     case 'kick':
+                        console.log('Playing kick drum');
                         playKick(now);
                         break;
                     case 'snare':
+                        console.log('Playing snare drum');
                         playSnare(now);
                         break;
                     case 'hihat':
+                        console.log('Playing hi-hat');
                         playHiHat(now);
                         break;
                     case 'clap':
+                        console.log('Playing clap');
                         playClap(now);
                         break;
                     case '808':
+                        console.log('Playing 808 bass');
                         play808Bass(note.note, now);
                         break;
                     case 'bass':
+                        console.log('Playing bass');
                         playBass(note.note, now);
                         break;
+                    default:
+                        console.log('Unknown instrument:', note.instrument);
                 }
             } catch (error) {
                 console.error('Error playing note:', error);
@@ -1570,6 +1598,52 @@
             };
             
             input.click();
+        }
+
+        // Test audio function to verify audio context is working
+        function testAudio() {
+            console.log('Testing audio...');
+            console.log('Audio context state:', audioContext ? audioContext.state : 'No audio context');
+            
+            if (!audioContext) {
+                alert('No audio context available');
+                return;
+            }
+            
+            // Resume audio context if suspended
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    console.log('Audio context resumed for test');
+                    playTestSound();
+                });
+            } else {
+                playTestSound();
+            }
+        }
+        
+        function playTestSound() {
+            try {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.frequency.value = 440; // A4 note
+                oscillator.type = 'sine';
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+                
+                console.log('Test sound played successfully');
+                updateStatus('Test sound played - audio is working!');
+            } catch (error) {
+                console.error('Error playing test sound:', error);
+                alert('Error playing test sound: ' + error.message);
+            }
         }
     </script>
 </body>
