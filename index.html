@@ -1228,43 +1228,102 @@
             
             if (!file) return;
             
+            // Check file size (limit to 50MB to prevent memory issues)
+            if (file.size > 50 * 1024 * 1024) {
+                alert('File too large. Please use files smaller than 50MB.');
+                return;
+            }
+            
+            // Check file type
+            if (!file.type.startsWith('audio/')) {
+                alert('Please select an audio file (MP3, WAV, OGG, etc.)');
+                return;
+            }
+            
+            updateStatus('Loading audio file...');
+            
             const reader = new FileReader();
             reader.onload = function(e) {
                 const arrayBuffer = e.target.result;
                 
-                audioContext.decodeAudioData(arrayBuffer)
-                    .then(buffer => {
-                        audioBuffer = buffer;
-                        audioDuration = buffer.duration;
-                        audioFileName = file.name;
-                        
-                        // Create audio nodes
-                        audioGainNode = audioContext.createGain();
-                        audioPitchNode = audioContext.createAudioWorkletNode('pitch-shifter');
-                        
-                        // Connect audio nodes
-                        audioGainNode.connect(filterNode);
-                        
-                        // Update UI
-                        updateAudioFileInfo();
-                        displayAudioWaveform();
-                        
-                        // Show play audio button
-                        document.getElementById('playAudioBtn').style.display = 'inline-block';
-                        
-                        // Update controls
-                        document.getElementById('audioTrackStart').max = Math.floor(audioDuration);
-                        document.getElementById('audioTrackStartNum').max = Math.floor(audioDuration);
-                        
-                        updateStatus(`Audio imported: ${audioFileName}`);
-                    })
-                    .catch(error => {
-                        console.error('Error decoding audio:', error);
-                        alert('Error loading audio file. Please try a different file.');
-                    });
+                // Use the modern decodeAudioData method with proper error handling
+                try {
+                    // For older browsers that don't support promises
+                    if (audioContext.decodeAudioData.length === 1) {
+                        audioContext.decodeAudioData(arrayBuffer, 
+                            function(buffer) {
+                                // Success callback
+                                handleAudioDecoded(buffer, file.name);
+                            },
+                            function(error) {
+                                // Error callback
+                                console.error('Error decoding audio (callback):', error);
+                                alert('Error decoding audio file. The file might be corrupted or in an unsupported format.');
+                                updateStatus('Audio loading failed');
+                            }
+                        );
+                    } else {
+                        // For modern browsers that support promises
+                        audioContext.decodeAudioData(arrayBuffer)
+                            .then(buffer => {
+                                handleAudioDecoded(buffer, file.name);
+                            })
+                            .catch(error => {
+                                console.error('Error decoding audio (promise):', error);
+                                alert('Error decoding audio file. The file might be corrupted or in an unsupported format.');
+                                updateStatus('Audio loading failed');
+                            });
+                    }
+                } catch (error) {
+                    console.error('Error in decodeAudioData:', error);
+                    alert('Error processing audio file. Please try a different file.');
+                    updateStatus('Audio loading failed');
+                }
+            };
+            
+            reader.onerror = function() {
+                console.error('Error reading file:', reader.error);
+                alert('Error reading the audio file. Please try again.');
+                updateStatus('File reading failed');
             };
             
             reader.readAsArrayBuffer(file);
+        }
+
+        function handleAudioDecoded(buffer, fileName) {
+            try {
+                audioBuffer = buffer;
+                audioDuration = buffer.duration;
+                audioFileName = fileName;
+                
+                // Create audio nodes
+                audioGainNode = audioContext.createGain();
+                
+                // Note: AudioWorkletNode requires a worklet module, so we'll skip it for now
+                // audioPitchNode = audioContext.createAudioWorkletNode('pitch-shifter');
+                
+                // Connect audio nodes to the effects chain
+                audioGainNode.connect(filterNode);
+                
+                // Update UI
+                updateAudioFileInfo();
+                displayAudioWaveform();
+                
+                // Show play audio button
+                document.getElementById('playAudioBtn').style.display = 'inline-block';
+                
+                // Update controls
+                document.getElementById('audioTrackStart').max = Math.floor(audioDuration);
+                document.getElementById('audioTrackStartNum').max = Math.floor(audioDuration);
+                
+                updateStatus(`Audio imported: ${fileName}`);
+                console.log('Audio successfully loaded:', fileName, 'Duration:', audioDuration, 'Sample Rate:', buffer.sampleRate);
+                
+            } catch (error) {
+                console.error('Error setting up audio:', error);
+                alert('Error setting up audio playback. Please try again.');
+                updateStatus('Audio setup failed');
+            }
         }
 
         function displayAudioWaveform() {
@@ -1347,11 +1406,12 @@
             const pitch = document.getElementById('audioTrackPitch').value;
             document.getElementById('audioTrackPitchNum').value = pitch;
             
-            if (audioPitchNode) {
-                // Note: This is a simplified pitch shift implementation
-                // In a real app, you'd use a proper pitch-shifting algorithm
-                console.log('Pitch shift to:', pitch);
+            // Simple pitch shifting using playback rate
+            if (audioSource) {
+                audioSource.playbackRate.value = parseFloat(pitch);
             }
+            
+            console.log('Pitch shift to:', pitch);
         }
 
         function updateAudioTrackStart() {
@@ -1393,6 +1453,10 @@
             // Create new audio source
             audioSource = audioContext.createBufferSource();
             audioSource.buffer = audioBuffer;
+            
+            // Apply current pitch setting
+            const pitch = parseFloat(document.getElementById('audioTrackPitch').value);
+            audioSource.playbackRate.value = pitch;
             
             // Connect to audio chain
             audioSource.connect(audioGainNode);
