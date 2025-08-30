@@ -510,6 +510,17 @@
             createPianoRoll();
             loadDefaultPattern();
             updateStatus('Ready');
+            
+            // Add click listener to initialize audio context on first user interaction
+            document.addEventListener('click', function initAudioOnFirstClick() {
+                if (audioContext && audioContext.state === 'suspended') {
+                    audioContext.resume().then(() => {
+                        console.log('Audio context resumed on first click');
+                        updateStatus('Audio ready - click play to start');
+                    });
+                }
+                document.removeEventListener('click', initAudioOnFirstClick);
+            }, { once: true });
         });
 
         function initializeAudio() {
@@ -792,6 +803,17 @@
                 return;
             }
             
+            // Resume audio context if it's suspended (required for autoplay policy)
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    console.log('Audio context resumed');
+                }).catch(error => {
+                    console.error('Error resuming audio context:', error);
+                    alert('Error starting audio. Please try clicking play again.');
+                    return;
+                });
+            }
+            
             isPlaying = true;
             currentStep = 0;
             updateStatus('Playing');
@@ -831,25 +853,29 @@
         function playNote(note) {
             const now = audioContext.currentTime;
             
-            switch (note.instrument) {
-                case 'kick':
-                    playKick(now);
-                    break;
-                case 'snare':
-                    playSnare(now);
-                    break;
-                case 'hihat':
-                    playHiHat(now);
-                    break;
-                case 'clap':
-                    playClap(now);
-                    break;
-                case '808':
-                    play808Bass(note.note, now);
-                    break;
-                case 'bass':
-                    playBass(note.note, now);
-                    break;
+            try {
+                switch (note.instrument) {
+                    case 'kick':
+                        playKick(now);
+                        break;
+                    case 'snare':
+                        playSnare(now);
+                        break;
+                    case 'hihat':
+                        playHiHat(now);
+                        break;
+                    case 'clap':
+                        playClap(now);
+                        break;
+                    case '808':
+                        play808Bass(note.note, now);
+                        break;
+                    case 'bass':
+                        playBass(note.note, now);
+                        break;
+                }
+            } catch (error) {
+                console.error('Error playing note:', error);
             }
         }
 
@@ -864,7 +890,7 @@
             gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
             
             oscillator.connect(gainNode);
-            gainNode.connect(filterNode);
+            gainNode.connect(audioContext.destination);
             
             oscillator.start(time);
             oscillator.stop(time + 0.5);
@@ -880,7 +906,7 @@
             gainNode.gain.setValueAtTime(0.7, time);
             gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
             
-            gainNode.connect(filterNode);
+            gainNode.connect(audioContext.destination);
             
             oscillator.start(time);
             oscillator.stop(time + 0.3);
@@ -894,10 +920,10 @@
             oscillator.type = 'square';
             
             gainNode.gain.setValueAtTime(0.3, time);
-            gainNode.gain.exponentialRampToAtTime(0.01, time + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
             
             oscillator.connect(gainNode);
-            gainNode.connect(filterNode);
+            gainNode.connect(audioContext.destination);
             
             oscillator.start(time);
             oscillator.stop(time + 0.1);
@@ -923,7 +949,7 @@
                 oscillator.stop(time + 0.2);
             }
             
-            gainNode.connect(filterNode);
+            gainNode.connect(audioContext.destination);
         }
 
         function play808Bass(note, time) {
@@ -938,7 +964,7 @@
             gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.8);
             
             oscillator.connect(gainNode);
-            gainNode.connect(filterNode);
+            gainNode.connect(audioContext.destination);
             
             oscillator.start(time);
             oscillator.stop(time + 0.8);
@@ -947,16 +973,16 @@
         function playBass(note, time) {
             const frequency = getNoteFrequency(note);
             const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
+            const mainGainNode = audioContext.createGain();
             
             oscillator.type = 'sawtooth';
             oscillator.frequency.value = frequency;
             
-            gainNode.gain.setValueAtTime(0.6, time);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+            mainGainNode.gain.setValueAtTime(0.6, time);
+            mainGainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
             
-            oscillator.connect(gainNode);
-            gainNode.connect(filterNode);
+            oscillator.connect(mainGainNode);
+            mainGainNode.connect(audioContext.destination);
             
             oscillator.start(time);
             oscillator.stop(time + 0.5);
